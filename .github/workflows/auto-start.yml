@@ -1,0 +1,26 @@
+name: Aternos Auto-Start
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: aternos-auto-start
+  cancel-in-progress: false
+
+jobs:
+  check-and-start:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - env:
+          ATERNOS_USER: ${{ secrets.ATERNOS_USER }}
+          ATERNOS_PASS: ${{ secrets.ATERNOS_PASS }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+        run: python start-server.py
