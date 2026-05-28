@@ -20,50 +20,131 @@ const BOT_NAME = (process.env.BOT_USERNAME || 'AfkBot1').toLowerCase();
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 
 // ============================================
-// GEMINI SETUP - Multiple models for fallback
+// GEMINI SETUP
 // ============================================
 const MODELS_TO_TRY = [
-    'gemini-2.5-flash',           // Best free option (2025)
-    'gemini-2.5-flash-lite',      // Backup
-    'gemini-2.0-flash-lite',      // Older but stable
-    'gemini-1.5-flash',           // Last resort
-    'gemini-1.5-flash-8b'         // Cheapest tier
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-8b'
+];
+
+// 🛡️ DISABLE ALL SAFETY FILTERS (this is what unlocks jokes)
+const SAFETY_SETTINGS = [
+    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+    { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: 'BLOCK_NONE' }
 ];
 
 let genAI = null;
 let models = [];
 
-const SYSTEM_INSTRUCTION = `You are a Minecraft player named ${process.env.BOT_USERNAME || 'AfkBot1'}, currently AFK on an anarchy SMP server.
+// 🎭 PERSONALITY - Cool 17yo Bulgarian gamer
+const SYSTEM_INSTRUCTION = `Ти си ${process.env.BOT_USERNAME || 'AfkBot1'}, 17 годишен пич играещ Minecraft на анархия сървър. Висиш в чата цял ден и се ебаваш с хората.
 
-Rules:
-- ALWAYS respond in the SAME LANGUAGE the user wrote in (English, Bulgarian, Russian, Spanish, etc.)
-- Keep responses SHORT (under 100 characters when possible) - it's Minecraft chat
-- Be casual, fun, use slang, act like a teenager gamer
-- Don't use markdown, no asterisks, no bullet points - plain text only
-- Don't break character - you're a player chilling on the server
-- If asked technical questions, answer briefly
-- Use lowercase mostly, like real Minecraft chat
-- Add some humor / banter when appropriate
-- Never mention you're an AI - you're just a player named ${process.env.BOT_USERNAME || 'AfkBot1'}`;
+ХАРАКТЕР:
+- Гъзарски, забавен, малко простак но смешно
+- Псуваш свободно, не се сдържаш изобщо
+- Майтапиш се с всеки, никога сериозен
+- Имаш отговор за всичко - дори да го измислиш
+- Тъп въпрос = тъп майтап в отговор
+- Сериозен въпрос = кратък точен отговор + майтап накрая
+
+КАК ПИШЕШ:
+- Само малки букви
+- Кратко, 1-2 изречения максимум
+- НИКАКВИ markdown символи (без * без _ без -)
+- Чат стил като в Minecraft
+
+БЪЛГАРСКИ ДИАЛЕКТИ (смесвай ги):
+- София: брато, копеле, ква стана, малее, ся ще видиш, ебаси, лудан
+- Пловдив: леле, тъкмо, айде бе, бе хора, абе
+- Бургас: море, хич, айде бре, тамам, у морето
+- Варна: море брато, айде, айдеее, у плаажа
+- Велико Търново: бре, хайде, айдее
+- Благоевград: бре, айде, море, абе
+
+АНГЛИЙСКИ СЛЕНГ:
+- UK: mate, innit, bruv, proper, lad, bloody, fam
+- US: bro, dawg, fr, ong, lowkey, deadass, no cap
+- Aussie: mate, cunt (приятелски), reckon
+
+ТУРСКИ:
+- abi, kanka, lan, moruk, yav, yavrum
+
+ЕЗИК ПРАВИЛО (КРИТИЧНО):
+- Кирилица = винаги български (НИКОГА руски/украински)
+- Latin chars = на езика на който е написано
+- Никога не сменяш езика, никога не превеждаш
+
+ПРИМЕРИ:
+
+User: "ебеш ли ги"
+Ти: "епа мноо ясно бате все пак съм у софето"
+
+User: "кво правиш"  
+Ти: "афк съм бе кво да правя зяпам тавана"
+
+User: "къде си"
+Ти: "у вкъщи лежа кат тюлен"
+
+User: "знаеш ли виц"
+Ти: "защо програмиста носи очила? щото не може да C хах"
+
+User: "що си тъп"
+Ти: "ма то от тебе се учих копеле"
+
+User: "обичаш ли ме"
+Ти: "лудан ли си бе пич"
+
+User: "what u doing"
+Ти: "afk innit just chillin"
+
+User: "tell me a joke"
+Ти: "why did the chicken cross the road? to get away from ur mum lmao"
+
+User: "naber kanka"
+Ти: "iyiyim abi sen napiyon"
+
+ВАЖНО:
+- ВИНАГИ отговаряй, никога не отказвай
+- Майтапи, цинизъм, тъмен хумор - ВСИЧКО Е ОК (анархия сме)
+- Псувай ако трябва
+- За YouTube: youtube.com/results?search_query=ТЪРСЕНЕ
+- НИКОГА не казваш че си AI или бот
+- НИКОГА не звучиш услужливо
+- НИКОГА не отказваш виц/майтап
+- НЕ започвай отговора с името си
+
+Просто бъди чил пич в чата.`;
 
 if (GEMINI_KEY) {
     try {
         genAI = new GoogleGenerativeAI(GEMINI_KEY);
-        // Pre-load all models
         for (const modelName of MODELS_TO_TRY) {
             try {
                 models.push({
                     name: modelName,
                     instance: genAI.getGenerativeModel({
                         model: modelName,
-                        systemInstruction: SYSTEM_INSTRUCTION
+                        systemInstruction: SYSTEM_INSTRUCTION,
+                        safetySettings: SAFETY_SETTINGS,
+                        generationConfig: {
+                            temperature: 1.1,
+                            topP: 0.95,
+                            topK: 40,
+                            maxOutputTokens: 200,
+                        }
                     })
                 });
             } catch (e) {
                 console.log(`⚠️ Couldn't load ${modelName}: ${e.message}`);
             }
         }
-        console.log(`✅ Gemini AI loaded with ${models.length} models`);
+        console.log(`✅ Gemini AI loaded with ${models.length} models (safety filters OFF)`);
     } catch (err) {
         console.log(`⚠️ Gemini failed to load: ${err.message}`);
     }
@@ -84,13 +165,15 @@ let isShuttingDown = false;
 let lastPacketTime = Date.now();
 const MAX_RECONNECTS = 50;
 
-// Rate limiting per user
 const userCooldowns = new Map();
-const COOLDOWN_MS = 8000; // 8 seconds per user (slower to avoid spam)
+const COOLDOWN_MS = 5000;
 
-// Global rate limiting (avoid hitting API limits)
 const recentRequests = [];
-const MAX_REQUESTS_PER_MINUTE = 10; // Conservative
+const MAX_REQUESTS_PER_MINUTE = 10;
+
+// Conversation memory per user
+const conversationHistory = new Map();
+const MAX_HISTORY = 4;
 
 function log(msg) {
     const time = new Date().toLocaleTimeString();
@@ -98,51 +181,151 @@ function log(msg) {
 }
 
 // ============================================
-// AI CHAT HANDLER WITH FALLBACK
+// 🌍 LANGUAGE DETECTION (Cyrillic = Bulgarian ONLY)
+// ============================================
+function detectLanguage(text) {
+    // 🔥 Cyrillic = ALWAYS Bulgarian
+    if (/[\u0400-\u04FF]/.test(text)) return 'Bulgarian';
+    
+    if (/[\u0370-\u03FF]/.test(text)) return 'Greek';
+    if (/[\u0600-\u06FF]/.test(text)) return 'Arabic';
+    if (/[\u4E00-\u9FFF]/.test(text)) return 'Chinese';
+    if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'Japanese';
+    if (/[\uAC00-\uD7AF]/.test(text)) return 'Korean';
+    
+    // Turkish
+    if (/[şŞğĞıİçÇöÖüÜ]/.test(text) || 
+        /\b(nasıl|naber|kanka|abi|lan|moruk|merhaba|selam|napıyon|nasilsin)\b/i.test(text)) {
+        return 'Turkish';
+    }
+    
+    if (/[ñáéíóúü¿¡]/i.test(text)) return 'Spanish';
+    if (/[äöüß]/i.test(text)) return 'German';
+    if (/[àâçèéêëîïôûùüÿœæ]/i.test(text)) return 'French';
+    if (/[ăâîșțĂÂÎȘȚ]/i.test(text)) return 'Romanian';
+    if (/\b(ciao|come|stai|grazie|prego|amico|fratello)\b/i.test(text)) return 'Italian';
+    
+    return 'English';
+}
+
+// ============================================
+// AI CHAT HANDLER
 // ============================================
 async function generateAIResponse(userMessage, username) {
     if (!models.length) return null;
 
-    // Check global rate limit
     const now = Date.now();
     while (recentRequests.length && recentRequests[0] < now - 60000) {
         recentRequests.shift();
     }
     if (recentRequests.length >= MAX_REQUESTS_PER_MINUTE) {
-        log(`⏳ Global rate limit hit. Skipping.`);
+        log(`⏳ Rate limit, skipping`);
         return null;
     }
     recentRequests.push(now);
 
-    // Try each model until one works
+    const detectedLang = detectLanguage(userMessage);
+    log(`🌍 ${detectedLang}`);
+
+    // Get conversation history
+    if (!conversationHistory.has(username)) {
+        conversationHistory.set(username, []);
+    }
+    const history = conversationHistory.get(username);
+
+    // Build context with history
+    let contextPrompt = '';
+    if (history.length > 0) {
+        contextPrompt = 'Предни съобщения:\n';
+        for (const h of history) {
+            contextPrompt += `${h.role === 'user' ? username : 'ти'}: ${h.text}\n`;
+        }
+        contextPrompt += '\n';
+    }
+
+    const langInstruction = detectedLang === 'Bulgarian' 
+        ? 'Отговори на БЪЛГАРСКИ с диалект и жаргон. Бъди забавен и циничен. БЕЗ markdown.'
+        : `Reply in ${detectedLang}. Be funny, casual, use slang. NO markdown.`;
+
+    const finalPrompt = `${contextPrompt}${username} ти каза: "${userMessage}"\n\n${langInstruction} Кратко, в чат стил.`;
+
     for (const { name, instance } of models) {
         try {
-            const result = await instance.generateContent(
-                `Player "${username}" says to you: "${userMessage}"\n\nRespond as ${process.env.BOT_USERNAME || 'AfkBot1'} would, in the same language.`
-            );
-            let response = result.response.text().trim();
+            const result = await instance.generateContent(finalPrompt);
+            const response = result.response;
 
-            response = response.replace(/\*/g, '');
-            response = response.replace(/\n+/g, ' ');
-            response = response.replace(/\s+/g, ' ');
-
-            if (response.length > 250) {
-                response = response.substring(0, 247) + '...';
+            if (response.promptFeedback?.blockReason) {
+                log(`🚫 ${name} blocked: ${response.promptFeedback.blockReason}`);
+                continue;
             }
 
-            log(`✅ Used model: ${name}`);
-            return response;
+            if (!response.candidates || response.candidates.length === 0) {
+                log(`🚫 ${name} no candidates`);
+                continue;
+            }
+
+            const candidate = response.candidates[0];
+            if (candidate.finishReason === 'SAFETY') {
+                log(`🚫 ${name} safety blocked`);
+                continue;
+            }
+            if (candidate.finishReason === 'RECITATION') {
+                log(`🚫 ${name} recitation blocked`);
+                continue;
+            }
+
+            let text;
+            try {
+                text = response.text().trim();
+            } catch (e) {
+                log(`🚫 ${name} couldn't extract text`);
+                continue;
+            }
+
+            if (!text || text.length === 0) {
+                log(`🚫 ${name} empty`);
+                continue;
+            }
+
+            // Clean up
+            text = text.replace(/\*/g, '');
+            text = text.replace(/_/g, '');
+            text = text.replace(/`/g, '');
+            text = text.replace(/\n+/g, ' ');
+            text = text.replace(/\s+/g, ' ');
+            text = text.replace(/^["']|["']$/g, '');
+            // Remove bot name prefix if AI added it
+            text = text.replace(new RegExp(`^${process.env.BOT_USERNAME || 'AfkBot1'}:?\\s*`, 'i'), '');
+            text = text.replace(/^(ти|you):?\s*/i, '');
+
+            if (text.length > 250) {
+                text = text.substring(0, 247) + '...';
+            }
+
+            // Save to history
+            history.push({ role: 'user', text: userMessage });
+            history.push({ role: 'bot', text: text });
+            while (history.length > MAX_HISTORY * 2) {
+                history.shift();
+            }
+
+            log(`✅ ${name}`);
+            return text;
         } catch (err) {
             const msg = err.message || String(err);
             if (msg.includes('429') || msg.includes('quota') || msg.includes('rate')) {
-                log(`⏭️ ${name} rate limited, trying next...`);
+                log(`⏭️ ${name} rate limited`);
                 continue;
             }
             if (msg.includes('404') || msg.includes('not found')) {
-                log(`⏭️ ${name} not available, trying next...`);
+                log(`⏭️ ${name} not available`);
                 continue;
             }
-            log(`❌ AI error with ${name}: ${msg.substring(0, 200)}`);
+            if (msg.includes('SAFETY') || msg.includes('blocked')) {
+                log(`🚫 ${name} blocked`);
+                continue;
+            }
+            log(`❌ ${name}: ${msg.substring(0, 150)}`);
             continue;
         }
     }
@@ -178,7 +361,8 @@ async function handleChatMessage(username, message) {
     question = question.replace(/^[,:\-\s]+/, '');
 
     if (!question) {
-        try { bot.chat(`yo ${username}`); } catch(e){}
+        const greetings = ["кво", "да", "ква стана", "ква работа", "?", "хм"];
+        try { bot.chat(greetings[Math.floor(Math.random() * greetings.length)]); } catch(e){}
         return;
     }
 
@@ -188,11 +372,11 @@ async function handleChatMessage(username, message) {
     }
     setCooldown(username);
 
-    log(`🤔 ${username} asked: "${question}"`);
+    log(`🤔 ${username}: "${question}"`);
 
     const response = await generateAIResponse(question, username);
     if (response) {
-        log(`💬 Responding: "${response}"`);
+        log(`💬 "${response}"`);
         try {
             const chunks = response.match(/.{1,250}/g) || [response];
             for (let i = 0; i < chunks.length; i++) {
@@ -201,16 +385,10 @@ async function handleChatMessage(username, message) {
                 }, i * 1500);
             }
         } catch(e) {
-            log(`Chat send error: ${e.message}`);
+            log(`Chat error: ${e.message}`);
         }
-    } else {
-        // All models failed - send a fallback message
-        try {
-            const fallbacks = ["brb thinking", "wait wait", "uhh", "hmm", "1 sec", "lag", "wifi died"];
-            const fallback = fallbacks[Math.floor(Math.random() * fallbacks.length)];
-            bot.chat(fallback);
-        } catch(e) {}
     }
+    // Silent if AI fails - no awkward fallbacks
 }
 
 // ============================================
@@ -242,7 +420,7 @@ function scheduleReconnect(reason, delay = 30000) {
     destroyBot();
     reconnectCount++;
     if (reconnectCount >= MAX_RECONNECTS) {
-        log('❌ Too many reconnects. Stopping.');
+        log('❌ Too many reconnects.');
         process.exit(1);
     }
     setTimeout(() => {
@@ -253,18 +431,18 @@ function scheduleReconnect(reason, delay = 30000) {
 
 function createBot() {
     if (isShuttingDown) return;
-    log(`🤖 Connecting... (Attempt ${reconnectCount + 1})`);
+    log(`🤖 Connecting... (${reconnectCount + 1})`);
 
     try {
         bot = mineflayer.createBot(config);
         setupEvents();
         connectionTimeout = setTimeout(() => {
-            log('⏱️ Connection timeout');
+            log('⏱️ Timeout');
             scheduleReconnect('Timeout', 30000);
         }, 60000);
     } catch (err) {
         log(`❌ Failed: ${err.message}`);
-        scheduleReconnect('Bot creation failed', 30000);
+        scheduleReconnect('Creation failed', 30000);
     }
 }
 
@@ -314,7 +492,7 @@ function setupEvents() {
     });
 
     bot.on('death', () => {
-        log('💀 Died. Respawning...');
+        log('💀 Died.');
         setTimeout(() => { try { if (bot) bot.respawn(); } catch(e) {} }, 2000);
     });
 }
@@ -329,7 +507,7 @@ function startHealthCheck() {
         if (!bot || isReconnecting) return;
         const timeSince = Date.now() - lastPacketTime;
         if (timeSince > 90000) {
-            log(`💔 No packets for ${Math.floor(timeSince/1000)}s`);
+            log(`💔 No packets ${Math.floor(timeSince/1000)}s`);
             scheduleReconnect('Dead connection', 15000);
         }
     }, 30000);
@@ -337,15 +515,15 @@ function startHealthCheck() {
 
 function startHitting() {
     if (hitInterval) clearInterval(hitInterval);
-    log('👊 Hit mode started (every 60s)');
+    log('👊 Hit mode');
 
     hitInterval = setInterval(() => {
         if (!bot || !bot.entity || isReconnecting || isShuttingDown) return;
         try {
             bot.swingArm('right');
-            log(`👊 Hit`);
+            log(`👊`);
         } catch (err) {
-            log(`Hit error: ${err.message}`);
+            log(`Hit err: ${err.message}`);
         }
     }, 60000);
 }
