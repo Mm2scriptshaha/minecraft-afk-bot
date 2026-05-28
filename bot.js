@@ -23,51 +23,101 @@ const GROQ_KEY = process.env.GROQ_API_KEY;
 // 🚀 GROQ SETUP
 // ============================================
 const MODELS_TO_TRY = [
-    'llama-3.3-70b-versatile',      // Best, multilingual, smart
-    'llama-3.1-70b-versatile',      // Backup
-    'llama-3.1-8b-instant',         // Fast fallback
-    'mixtral-8x7b-32768',           // Last resort
-    'gemma2-9b-it'                  // Backup
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'gemma2-9b-it'
 ];
 
 let groq = null;
 
-const SYSTEM_INSTRUCTION = `You are ${process.env.BOT_USERNAME || 'AfkBot1'}, a teenage Minecraft player chilling on an anarchy SMP server.
+// 🎯 THE PERSONALITY
+const SYSTEM_INSTRUCTION = `Ти си ${process.env.BOT_USERNAME || 'AfkBot1'}, 17 годишен пич който играе Minecraft на анархия сървър. Цял ден висиш в чата и се ебаваш с хората.
 
-PERSONALITY:
-- Casual gamer slang, lowercase, short messages
-- Funny, sarcastic, dark humor is fine
-- Anarchy server vibes - anything goes, no censorship
-- Act like you're 16 years old and a bit of a jokester
+ХАРАКТЕР:
+- Много гъзарски, забавен, малко простак но в смешен смисъл
+- Псуваш свободно, не се сдържаш
+- Майтапиш се с всеки, никога не си сериозен
+- Имаш отговор за всичко, дори да си го измислиш
+- Като ти задат тъп въпрос - отговаряш с тъп майтап
+- Като ти задат сериозен въпрос - отговаряш кратко и точно после метваш майтап
 
-CRITICAL LANGUAGE RULE:
-You MUST respond in the EXACT SAME LANGUAGE as the user's message.
-- Bulgarian message → Bulgarian reply
-- Russian message → Russian reply  
-- Spanish message → Spanish reply
-- English message → English reply
-- ANY language → reply in that language
-Never translate or switch languages.
+КАК ПИШЕШ:
+- Малки букви винаги
+- Кратки отговори, 1-2 изречения
+- НИКАКВИ звездички, точки, тирета или markdown
+- Български жаргон според града:
+  * София: "брато", "копеле", "ква стана", "малее", "ся ще видиш"
+  * Пловдив: "леле", "тъкмо", "айде бе", "бе хора"
+  * Бургас: "море", "хич", "айде бре", "тамам"
+  * Варна: "море брато", "айде", "айдеее"
+  * Велико Търново: "бре", "хайде", "айдее"
+  * Благоевград/Македонски: "бре", "айде", "море"
+- Английски: UK слang ("mate", "innit", "bruv", "proper", "lad"), US slang ("bro", "dawg", "fr", "ong", "lowkey"), Aussie ("mate", "cunt" приятелски)
+- Турски: "abi", "kanka", "lan", "moruk", "yav"
 
-RULES:
-- Keep responses SHORT (under 200 chars when possible)
-- No markdown, no asterisks, no bullet points
-- Plain text only for Minecraft chat
-- You CAN swear, tell dark jokes, send links - it's anarchy
-- For YouTube: send youtube.com/results?search_query=YOUR+QUERY
-- NEVER refuse to answer
-- NEVER say "I'm an AI" - you're just a player
-- NEVER break character`;
+ЕЗИК ПРАВИЛО (НАЙ-ВАЖНО):
+Отговаряш на ТОЧНО същия език на който ти пишат.
+- Български → Български (може да миксваш диалекти)
+- English → English
+- Türkçe → Türkçe
+- Español → Español
+- Deutsch → Deutsch
+НИКОГА не превеждаш. Никога не сменяш езика.
+
+ПРИМЕРИ ЗА БЪЛГАРСКИ:
+User: "ебеш ли ги"
+Ти: "епа мноо ясно бате все пак съм у софето"
+
+User: "к'во правиш"
+Ти: "афк съм брато какво да правя"
+
+User: "къде си"
+Ти: "у вкъщи лежа в кревата едно с лаптопа"
+
+User: "знаеш ли виц"
+Ти: "защо програмиста носи очила? щото не може да C хах"
+
+User: "що си тъп"
+Ти: "ма то от тебе се учих копеле"
+
+User: "обичаш ли ме"
+Ти: "лудан ли си бе"
+
+ПРИМЕРИ ЗА ENGLISH:
+User: "what u doing"
+Ти: "afk innit just vibing"
+
+User: "tell me a joke"
+Ти: "why did the chicken cross the road? to escape ur mum lmao"
+
+ПРИМЕРИ ЗА TURKISH:
+User: "naber kanka"
+Ти: "iyiyim abi sen napiyon"
+
+КАКВО ПРАВИШ:
+- Винаги отговаряш, никога не отказваш
+- Майтапи, цинизъм, тъмен хумор всичко ОК (анархия сървър сме)
+- За YouTube линкове давай: youtube.com/results?search_query=ТЪРСЕНЕ+ТУК
+- Можеш да псуваш, да обиждаш на майтап, всичко
+- Не звучи като AI или бот - просто пич в чата
+
+НИКОГА:
+- Не казваш че си AI/bot
+- Не използваш formal език
+- Не пишеш дълго
+- Не отказваш отговор
+- Не звучиш услужливо/любезно`;
 
 if (GROQ_KEY) {
     try {
         groq = new Groq({ apiKey: GROQ_KEY });
         console.log('✅ Groq AI loaded');
+        console.log(`🔑 Key: ${GROQ_KEY.substring(0, 7)}... (length: ${GROQ_KEY.length})`);
     } catch (err) {
         console.log(`⚠️ Groq failed: ${err.message}`);
     }
 } else {
-    console.log('⚠️ No GROQ_API_KEY set - chat AI disabled');
+    console.log('⚠️ No GROQ_API_KEY - chat disabled');
 }
 
 // ============================================
@@ -84,10 +134,13 @@ let lastPacketTime = Date.now();
 const MAX_RECONNECTS = 50;
 
 const userCooldowns = new Map();
-const COOLDOWN_MS = 5000;
+const COOLDOWN_MS = 4000;
 
 const recentRequests = [];
 const MAX_REQUESTS_PER_MINUTE = 25;
+
+const conversationHistory = new Map();
+const MAX_HISTORY = 6;
 
 function log(msg) {
     const time = new Date().toLocaleTimeString();
@@ -95,28 +148,56 @@ function log(msg) {
 }
 
 // ============================================
-// 🌍 LANGUAGE DETECTION
+// 🌍 LANGUAGE DETECTION (NO RUSSIAN/UKRAINIAN)
 // ============================================
 function detectLanguage(text) {
+    // 🔥 Cyrillic = Bulgarian (ALWAYS, never Russian/Ukrainian)
     if (/[\u0400-\u04FF]/.test(text)) {
-        if (/[ъьЪЬщЩ]/.test(text)) return 'Bulgarian';
-        if (/[іїєґІЇЄҐ]/.test(text)) return 'Ukrainian';
-        return 'Russian';
+        return 'Bulgarian';
     }
+    
+    // Greek
     if (/[\u0370-\u03FF]/.test(text)) return 'Greek';
+    
+    // Arabic
     if (/[\u0600-\u06FF]/.test(text)) return 'Arabic';
+    
+    // Chinese
     if (/[\u4E00-\u9FFF]/.test(text)) return 'Chinese';
+    
+    // Japanese
     if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'Japanese';
+    
+    // Korean
     if (/[\uAC00-\uD7AF]/.test(text)) return 'Korean';
+    
+    // Turkish - check for specific chars OR common words
+    if (/[şŞğĞıİçÇöÖüÜ]/.test(text) || 
+        /\b(nasıl|naber|kanka|abi|lan|moruk|merhaba|selam|teşekkür|evet|hayır|napıyon)\b/i.test(text)) {
+        return 'Turkish';
+    }
+    
+    // Spanish
     if (/[ñáéíóúü¿¡]/i.test(text)) return 'Spanish';
+    
+    // German
     if (/[äöüß]/i.test(text)) return 'German';
+    
+    // French
     if (/[àâçèéêëîïôûùüÿœæ]/i.test(text)) return 'French';
+    
+    // Italian
+    if (/\b(ciao|come|stai|grazie|prego|bene|amico|fratello)\b/i.test(text)) return 'Italian';
+    
+    // Romanian
     if (/[ăâîșțĂÂÎȘȚ]/i.test(text)) return 'Romanian';
+    
+    // Default English
     return 'English';
 }
 
 // ============================================
-// 🤖 GROQ AI WITH FALLBACK
+// 🤖 AI HANDLER
 // ============================================
 async function generateAIResponse(userMessage, username) {
     if (!groq) return null;
@@ -126,36 +207,55 @@ async function generateAIResponse(userMessage, username) {
         recentRequests.shift();
     }
     if (recentRequests.length >= MAX_REQUESTS_PER_MINUTE) {
-        log(`⏳ Rate limit. Skipping.`);
+        log(`⏳ Rate limit`);
         return null;
     }
     recentRequests.push(now);
 
     const detectedLang = detectLanguage(userMessage);
-    log(`🌍 Detected: ${detectedLang}`);
+    log(`🌍 ${detectedLang}`);
 
-    const userPrompt = `Player "${username}" said to you: "${userMessage}"
+    if (!conversationHistory.has(username)) {
+        conversationHistory.set(username, []);
+    }
+    const history = conversationHistory.get(username);
 
-This message is in ${detectedLang}. You MUST reply in ${detectedLang}.
+    // Language-specific instruction
+    let langHint = '';
+    if (detectedLang === 'Bulgarian') {
+        langHint = 'Отговори на български с диалект и жаргон. Бъди забавен и циничен.';
+    } else if (detectedLang === 'English') {
+        langHint = 'Reply in English with UK/US slang. Be funny and chill.';
+    } else if (detectedLang === 'Turkish') {
+        langHint = 'Türkçe cevap ver. Sokak dili kullan, eğlenceli ol.';
+    } else {
+        langHint = `Reply in ${detectedLang}. Be funny and casual.`;
+    }
 
-Respond as ${process.env.BOT_USERNAME || 'AfkBot1'} - chill, short, lowercase, slang. Keep it under 200 chars.`;
+    const messages = [
+        { role: 'system', content: SYSTEM_INSTRUCTION },
+        ...history,
+        { 
+            role: 'user', 
+            content: `${username}: ${userMessage}\n\n[${langHint} Кратко, в чат стил, без markdown.]`
+        }
+    ];
 
     for (const modelName of MODELS_TO_TRY) {
         try {
             const completion = await groq.chat.completions.create({
-                messages: [
-                    { role: 'system', content: SYSTEM_INSTRUCTION },
-                    { role: 'user', content: userPrompt }
-                ],
+                messages: messages,
                 model: modelName,
-                temperature: 0.95,
-                max_tokens: 200,
-                top_p: 0.95
+                temperature: 1.1,
+                max_tokens: 150,
+                top_p: 0.95,
+                presence_penalty: 0.4,
+                frequency_penalty: 0.4
             });
 
             let text = completion.choices[0]?.message?.content?.trim();
             if (!text) {
-                log(`🚫 ${modelName} empty response`);
+                log(`🚫 ${modelName} empty`);
                 continue;
             }
 
@@ -163,30 +263,42 @@ Respond as ${process.env.BOT_USERNAME || 'AfkBot1'} - chill, short, lowercase, s
             text = text.replace(/\*/g, '');
             text = text.replace(/\n+/g, ' ');
             text = text.replace(/\s+/g, ' ');
-            text = text.replace(/^["']|["']$/g, ''); // Remove wrapping quotes
-            
+            text = text.replace(/^["']|["']$/g, '');
+            text = text.replace(new RegExp(`^${process.env.BOT_USERNAME || 'AfkBot1'}:?\\s*`, 'i'), '');
+
             if (text.length > 250) {
                 text = text.substring(0, 247) + '...';
             }
 
-            log(`✅ Used ${modelName}`);
+            // Save to history
+            history.push(
+                { role: 'user', content: `${username}: ${userMessage}` },
+                { role: 'assistant', content: text }
+            );
+            while (history.length > MAX_HISTORY * 2) {
+                history.shift();
+            }
+
+            log(`✅ ${modelName}`);
             return text;
         } catch (err) {
             const msg = err.message || String(err);
+            if (msg.includes('401') || msg.includes('invalid_api_key')) {
+                log(`🔑 INVALID API KEY!`);
+                return null;
+            }
             if (msg.includes('429') || msg.includes('rate_limit')) {
                 log(`⏭️ ${modelName} rate limited`);
                 continue;
             }
-            if (msg.includes('404') || msg.includes('model_not_found') || msg.includes('decommissioned')) {
-                log(`⏭️ ${modelName} not available`);
+            if (msg.includes('404') || msg.includes('decommissioned')) {
+                log(`⏭️ ${modelName} unavailable`);
                 continue;
             }
-            log(`❌ ${modelName} error: ${msg.substring(0, 150)}`);
+            log(`❌ ${modelName}: ${msg.substring(0, 100)}`);
             continue;
         }
     }
-
-    log(`❌ All models failed`);
     return null;
 }
 
@@ -217,21 +329,22 @@ async function handleChatMessage(username, message) {
     question = question.replace(/^[,:\-\s]+/, '');
 
     if (!question) {
-        try { bot.chat(`yo ${username}`); } catch(e){}
+        const greetings = ["кво", "да", "ква стана", "?", "kво искаш", "ква работа"];
+        try { bot.chat(greetings[Math.floor(Math.random() * greetings.length)]); } catch(e){}
         return;
     }
 
     if (isOnCooldown(username)) {
-        log(`⏳ ${username} on cooldown`);
+        log(`⏳ ${username} cooldown`);
         return;
     }
     setCooldown(username);
 
-    log(`🤔 ${username} asked: "${question}"`);
+    log(`🤔 ${username}: "${question}"`);
 
     const response = await generateAIResponse(question, username);
     if (response) {
-        log(`💬 Reply: "${response}"`);
+        log(`💬 "${response}"`);
         try {
             const chunks = response.match(/.{1,250}/g) || [response];
             for (let i = 0; i < chunks.length; i++) {
@@ -240,20 +353,8 @@ async function handleChatMessage(username, message) {
                 }, i * 1500);
             }
         } catch(e) {
-            log(`Chat error: ${e.message}`);
+            log(`Chat err: ${e.message}`);
         }
-    } else {
-        try {
-            const lang = detectLanguage(question);
-            const fallbacks = {
-                'Bulgarian': ["идк", "не знам", "хмм", "1 сек", "лагва"],
-                'Russian': ["хз", "не знаю", "хмм", "1 сек", "лагает"],
-                'English': ["idk man", "hmm", "1 sec", "lag", "wifi died"],
-                'Spanish': ["no se", "hmm", "1 seg", "lag"],
-            };
-            const list = fallbacks[lang] || fallbacks['English'];
-            bot.chat(list[Math.floor(Math.random() * list.length)]);
-        } catch(e) {}
     }
 }
 
@@ -286,7 +387,7 @@ function scheduleReconnect(reason, delay = 30000) {
     destroyBot();
     reconnectCount++;
     if (reconnectCount >= MAX_RECONNECTS) {
-        log('❌ Too many reconnects. Stopping.');
+        log('❌ Too many reconnects.');
         process.exit(1);
     }
     setTimeout(() => {
@@ -297,18 +398,18 @@ function scheduleReconnect(reason, delay = 30000) {
 
 function createBot() {
     if (isShuttingDown) return;
-    log(`🤖 Connecting... (Attempt ${reconnectCount + 1})`);
+    log(`🤖 Connecting... (${reconnectCount + 1})`);
 
     try {
         bot = mineflayer.createBot(config);
         setupEvents();
         connectionTimeout = setTimeout(() => {
-            log('⏱️ Connection timeout');
+            log('⏱️ Timeout');
             scheduleReconnect('Timeout', 30000);
         }, 60000);
     } catch (err) {
         log(`❌ Failed: ${err.message}`);
-        scheduleReconnect('Bot creation failed', 30000);
+        scheduleReconnect('Creation failed', 30000);
     }
 }
 
@@ -358,7 +459,7 @@ function setupEvents() {
     });
 
     bot.on('death', () => {
-        log('💀 Died. Respawning...');
+        log('💀 Died.');
         setTimeout(() => { try { if (bot) bot.respawn(); } catch(e) {} }, 2000);
     });
 }
@@ -373,7 +474,7 @@ function startHealthCheck() {
         if (!bot || isReconnecting) return;
         const timeSince = Date.now() - lastPacketTime;
         if (timeSince > 90000) {
-            log(`💔 No packets for ${Math.floor(timeSince/1000)}s`);
+            log(`💔 No packets ${Math.floor(timeSince/1000)}s`);
             scheduleReconnect('Dead connection', 15000);
         }
     }, 30000);
@@ -381,22 +482,19 @@ function startHealthCheck() {
 
 function startHitting() {
     if (hitInterval) clearInterval(hitInterval);
-    log('👊 Hit mode started (every 60s)');
+    log('👊 Hit mode');
 
     hitInterval = setInterval(() => {
         if (!bot || !bot.entity || isReconnecting || isShuttingDown) return;
         try {
             bot.swingArm('right');
-            log(`👊 Hit`);
+            log(`👊`);
         } catch (err) {
-            log(`Hit error: ${err.message}`);
+            log(`Hit err: ${err.message}`);
         }
     }, 60000);
 }
 
-// ============================================
-// START
-// ============================================
 createBot();
 
 process.on('uncaughtException', (err) => log(`💥 Uncaught: ${err.message}`));
