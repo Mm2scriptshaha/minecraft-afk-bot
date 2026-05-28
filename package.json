@@ -1,13 +1,13 @@
 {
   "name": "minecraft-afk-bot",
-  "version": "2.0.0",
-  "description": "AI-powered AFK bot with Gemini",
+  "version": "3.0.0",
+  "description": "AI-powered AFK bot with Groq",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
   "dependencies": {
     "mineflayer": "latest",
-    "@google/generative-ai": "latest"
+    "groq-sdk": "latest"
   }
 }
