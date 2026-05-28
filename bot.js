@@ -23,14 +23,18 @@ const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 // 🚀 OPENROUTER MODELS - Free ones first
 // ============================================
 const MODELS_TO_TRY = [
-    'meta-llama/llama-3.3-70b-instruct:free',
+    'deepseek/deepseek-r1-0528:free',
     'deepseek/deepseek-chat-v3.1:free',
-    'meta-llama/llama-3.2-3b-instruct:free',
-    'google/gemini-2.0-flash-exp:free',
-    'qwen/qwen-2.5-72b-instruct:free',
-    'mistralai/mistral-7b-instruct:free'
+    'deepseek/deepseek-r1:free',
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'qwen/qwen3-235b-a22b:free',
+    'qwen/qwen3-coder:free',
+    'tngtech/deepseek-r1t-chimera:free',
+    'google/gemma-3-27b-it:free',
+    'mistralai/mistral-small-3.2-24b-instruct:free',
+    'nvidia/nemotron-nano-9b-v2:free',
+    'meta-llama/llama-3.2-3b-instruct:free'
 ];
-
 // 🎯 NATURAL CHILL PERSONALITY
 const SYSTEM_INSTRUCTION = `Ти си ${process.env.BOT_USERNAME || 'AfkBot1'}, 17 годишен софиянец играещ Minecraft на анархия сървър.
 
