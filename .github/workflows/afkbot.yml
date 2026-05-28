@@ -1,8 +1,8 @@
-# This is what you ALREADY have
 name: Minecraft AFK Bot
+
 on:
   schedule:
-    - cron: '0 */5 * * *'
+    - cron: '50 */4 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -11,17 +11,27 @@ concurrency:
 
 jobs:
   run-bot:
+    name: Run AFK Bot
     runs-on: ubuntu-latest
-    timeout-minutes: 290
+    timeout-minutes: 295
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install
-      - env:
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Start AFK Bot
+        env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_PORT: ${{ secrets.SERVER_PORT }}
           BOT_USERNAME: ${{ secrets.BOT_USERNAME }}
           MC_VERSION: ${{ secrets.MC_VERSION }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: node bot.js
