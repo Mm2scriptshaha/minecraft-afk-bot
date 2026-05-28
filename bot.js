@@ -1,5 +1,5 @@
 const mineflayer = require('mineflayer');
-const https = require('https');
+const OpenAI = require('openai');
 
 // ============================================
 // CONFIG
