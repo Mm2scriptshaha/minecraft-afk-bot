@@ -1,13 +1,13 @@
 {
   "name": "minecraft-afk-bot",
-  "version": "4.0.0",
-  "description": "AFK bot with OpenRouter AI",
+  "version": "3.0.0",
+  "description": "AFK bot with Groq AI",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
   "dependencies": {
     "mineflayer": "latest",
-    "openai": "latest"
+    "groq-sdk": "latest"
   }
 }
