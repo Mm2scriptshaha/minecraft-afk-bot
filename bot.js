@@ -152,8 +152,8 @@ function detectLanguage(text) {
     if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'Japanese';
     if (/[\uAC00-\uD7AF]/.test(text)) return 'Korean';
     
-    // Bulgarian in Latin chars
-    if (/\b(kak|kvo|brato|kakvo|qko|kade|zashto|haide|maika|baba|sega|tup|maina|brat si|bre|ebati|haresva|stiga|kifte|ako|kogato|tva|ne moga|moga|iskam|nqma|qsen)\b/i.test(text)) {
+        // Bulgarian written in Latin chars - EXPANDED LIST
+    if (/\b(kak|kvo|kwo|brato|kakvo|qko|kade|kude|zashto|zashto|haide|hajde|maika|maika|baba|sega|tup|maina|brat si|bre|ebati|haresva|stiga|kifte|ako|kogato|tva|tova|ne moga|moga|iskam|nqma|nyama|qsen|prawish|pravish|pravi|raboti|jiwot|jivot|kasno|rano|mlqko|mlyako|hlqb|hlyab|bira|rakiq|rakiya|gosho|pesho|ivan|stoq|stoyu|sega|moje|mojesh|mozhe|kolko|toy|tya|nyakoy|nikoy|vsichko|nishto|samo|samo|edinstveno|bili|biha|sa|si|sum|sym|sm|si|e|sa|beше|beshe|стои|spi|spiq|fyrli|fyrlqu|gleda|gledam|pishe|pisha|chuva|chuwa|raboti|igrae|igra|kade ti e|kak vyrvi|kak ide|nali|znaesh|zname|znaqu|znaq|кво|нар|ква|кат|кат|кои|той|тя|тоя|тая|ние|вие|те|тях|нашия|вашия|моя|твоя|свой|твоят|моя|тоя|тая|туй|туй|тук|там|къде|кога|защо|как|колко|кой|що|що се|т.е)\b/i.test(text)) {
         return 'Bulgarian';
     }
     
