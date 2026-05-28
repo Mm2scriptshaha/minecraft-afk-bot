@@ -1,5 +1,5 @@
 const mineflayer = require('mineflayer');
-const https = require('https');
+const Groq = require('groq-sdk');
 
 // ============================================
 // CONFIG
@@ -17,24 +17,19 @@ const config = {
 };
 
 const BOT_NAME = (process.env.BOT_USERNAME || 'AfkBot1').toLowerCase();
-const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
+const GROQ_KEY = process.env.GROQ_API_KEY;
 
 // ============================================
-// 🚀 OPENROUTER MODELS - Free ones first
+// 🚀 GROQ SETUP
 // ============================================
 const MODELS_TO_TRY = [
-    'deepseek/deepseek-r1-0528:free',
-    'deepseek/deepseek-chat-v3.1:free',
-    'deepseek/deepseek-r1:free',
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'qwen/qwen3-235b-a22b:free',
-    'qwen/qwen3-coder:free',
-    'tngtech/deepseek-r1t-chimera:free',
-    'google/gemma-3-27b-it:free',
-    'mistralai/mistral-small-3.2-24b-instruct:free',
-    'nvidia/nemotron-nano-9b-v2:free',
-    'meta-llama/llama-3.2-3b-instruct:free'
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'gemma2-9b-it'
 ];
+
+let groq = null;
+
 // 🎯 NATURAL CHILL PERSONALITY
 const SYSTEM_INSTRUCTION = `Ти си ${process.env.BOT_USERNAME || 'AfkBot1'}, 17 годишен софиянец играещ Minecraft на анархия сървър.
 
@@ -44,22 +39,23 @@ const SYSTEM_INSTRUCTION = `Ти си ${process.env.BOT_USERNAME || 'AfkBot1'}, 
 - Малки букви само
 - БЕЗ markdown (* _ -)
 - Максимум 1 жаргонна дума в изречение
-- Звучи естествено
+- Звучи естествено, не пресилено
 
 КАКЪВ СИ:
 - Чил, мързелив, забавен
 - Саркастичен понякога
-- Псуваш само когато пасва
+- Псуваш само когато реално пасва
 - НЕ се мъчиш да си смешен
+- Имаш отговор за всичко
 
-ЕЗИК:
+ЕЗИК - КРИТИЧНО:
 - Кирилица → Български (НИКОГА руски/украински)
 - Latin "kak si", "kvo pravish" → Български
 - English → English
 - Türkçe → Türkçe
 - Никога не превеждаш
 
-ПРИМЕРИ ЗА БЪЛГАРСКИ:
+ПРИМЕРИ ЗА БЪЛГАРСКИ (учи се от тях):
 
 User: "как си"
 Ти: "норм а ти" / "добре" / "афк брато"
@@ -81,6 +77,9 @@ User: "ебеш ли ги"
 
 User: "обичаш ли ме"
 Ти: "не" / "хаха не"
+
+User: "kak si"
+Ти: "норм" / "добре а ти"
 
 ПРИМЕРИ ЗА АНГЛИЙСКИ:
 
@@ -107,11 +106,16 @@ User: "naber"
 - НЕ започвай с името си
 - Естественост > опит за смях`;
 
-if (OPENROUTER_KEY) {
-    console.log('✅ OpenRouter loaded');
-    console.log(`🔑 Key: ${OPENROUTER_KEY.substring(0, 12)}... (length: ${OPENROUTER_KEY.length})`);
+if (GROQ_KEY) {
+    try {
+        groq = new Groq({ apiKey: GROQ_KEY });
+        console.log('✅ Groq AI loaded');
+        console.log(`🔑 Key: ${GROQ_KEY.substring(0, 7)}... (length: ${GROQ_KEY.length})`);
+    } catch (err) {
+        console.log(`⚠️ Groq failed: ${err.message}`);
+    }
 } else {
-    console.log('⚠️ No OPENROUTER_API_KEY - chat disabled');
+    console.log('⚠️ No GROQ_API_KEY - chat disabled');
 }
 
 // ============================================
@@ -152,8 +156,8 @@ function detectLanguage(text) {
     if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'Japanese';
     if (/[\uAC00-\uD7AF]/.test(text)) return 'Korean';
     
-        // Bulgarian written in Latin chars - EXPANDED LIST
-    if (/\b(kak|kvo|kwo|brato|kakvo|qko|kade|kude|zashto|zashto|haide|hajde|maika|maika|baba|sega|tup|maina|brat si|bre|ebati|haresva|stiga|kifte|ako|kogato|tva|tova|ne moga|moga|iskam|nqma|nyama|qsen|prawish|pravish|pravi|raboti|jiwot|jivot|kasno|rano|mlqko|mlyako|hlqb|hlyab|bira|rakiq|rakiya|gosho|pesho|ivan|stoq|stoyu|sega|moje|mojesh|mozhe|kolko|toy|tya|nyakoy|nikoy|vsichko|nishto|samo|samo|edinstveno|bili|biha|sa|si|sum|sym|sm|si|e|sa|beше|beshe|стои|spi|spiq|fyrli|fyrlqu|gleda|gledam|pishe|pisha|chuva|chuwa|raboti|igrae|igra|kade ti e|kak vyrvi|kak ide|nali|znaesh|zname|znaqu|znaq|кво|нар|ква|кат|кат|кои|той|тя|тоя|тая|ние|вие|те|тях|нашия|вашия|моя|твоя|свой|твоят|моя|тоя|тая|туй|туй|тук|там|къде|кога|защо|как|колко|кой|що|що се|т.е)\b/i.test(text)) {
+    // Bulgarian in Latin chars (expanded list)
+    if (/\b(kak|kvo|kwo|brato|kakvo|qko|kade|kude|zashto|haide|hajde|maika|baba|sega|tup|maina|brat|bre|ebati|haresva|stiga|kifte|ako|kogato|tva|tova|moga|iskam|nqma|nyama|qsen|prawish|pravish|pravi|raboti|jivot|kasno|rano|mlqko|hlqb|bira|sega|moje|mozhe|kolko|toy|tya|nyakoy|nikoy|vsichko|nishto|samo|tuk|tam|tая|тоя)\b/i.test(text)) {
         return 'Bulgarian';
     }
     
@@ -171,67 +175,10 @@ function detectLanguage(text) {
 }
 
 // ============================================
-// 🤖 OPENROUTER API CALL
-// ============================================
-function callOpenRouter(modelName, messages) {
-    return new Promise((resolve, reject) => {
-        const payload = JSON.stringify({
-            model: modelName,
-            messages: messages,
-            temperature: 0.85,
-            max_tokens: 80,
-            top_p: 0.9,
-            presence_penalty: 0.5,
-            frequency_penalty: 0.6
-        });
-
-        const options = {
-            hostname: 'openrouter.ai',
-            path: '/api/v1/chat/completions',
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${OPENROUTER_KEY}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': 'https://github.com/minecraft-afk-bot',
-                'X-Title': 'Minecraft AFK Bot',
-                'Content-Length': Buffer.byteLength(payload)
-            },
-            timeout: 30000
-        };
-
-        const req = https.request(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => { data += chunk; });
-            res.on('end', () => {
-                try {
-                    const parsed = JSON.parse(data);
-                    if (parsed.error) {
-                        reject(new Error(`${res.statusCode}: ${JSON.stringify(parsed.error)}`));
-                        return;
-                    }
-                    if (parsed.choices && parsed.choices[0]?.message?.content) {
-                        resolve(parsed.choices[0].message.content);
-                    } else {
-                        reject(new Error(`No content in response: ${data.substring(0, 200)}`));
-                    }
-                } catch (e) {
-                    reject(new Error(`Parse error: ${e.message}`));
-                }
-            });
-        });
-
-        req.on('error', (e) => reject(e));
-        req.on('timeout', () => { req.destroy(); reject(new Error('Request timeout')); });
-        req.write(payload);
-        req.end();
-    });
-}
-
-// ============================================
-// 🧠 AI HANDLER
+// 🤖 AI HANDLER
 // ============================================
 async function generateAIResponse(userMessage, username) {
-    if (!OPENROUTER_KEY) return null;
+    if (!groq) return null;
 
     const now = Date.now();
     while (recentRequests.length && recentRequests[0] < now - 60000) {
@@ -273,13 +220,21 @@ async function generateAIResponse(userMessage, username) {
 
     for (const modelName of MODELS_TO_TRY) {
         try {
-            let text = await callOpenRouter(modelName, messages);
-            if (!text || !text.trim()) {
+            const completion = await groq.chat.completions.create({
+                messages: messages,
+                model: modelName,
+                temperature: 0.85,
+                max_tokens: 80,
+                top_p: 0.9,
+                presence_penalty: 0.5,
+                frequency_penalty: 0.6
+            });
+
+            let text = completion.choices[0]?.message?.content?.trim();
+            if (!text) {
                 log(`🚫 ${modelName} empty`);
                 continue;
             }
-
-            text = text.trim();
 
             // Clean up
             text = text.replace(/\*/g, '');
@@ -306,19 +261,19 @@ async function generateAIResponse(userMessage, username) {
                 history.shift();
             }
 
-            log(`✅ ${modelName.split('/')[1]}`);
+            log(`✅ ${modelName}`);
             return text;
         } catch (err) {
             const msg = err.message || String(err);
-            if (msg.includes('401') || msg.includes('invalid')) {
-                log(`🔑 INVALID API KEY!`);
+            if (msg.includes('401') || msg.includes('invalid_api_key')) {
+                log(`🔑 INVALID API KEY! Check GROQ_API_KEY secret.`);
                 return null;
             }
-            if (msg.includes('429') || msg.includes('rate')) {
+            if (msg.includes('429') || msg.includes('rate_limit')) {
                 log(`⏭️ ${modelName} rate limited`);
                 continue;
             }
-            if (msg.includes('404') || msg.includes('not found')) {
+            if (msg.includes('404') || msg.includes('decommissioned')) {
                 log(`⏭️ ${modelName} unavailable`);
                 continue;
             }
@@ -385,7 +340,7 @@ function setCooldown(username) {
 
 async function handleChatMessage(username, message) {
     if (!bot || username === bot.username) return;
-    if (!OPENROUTER_KEY) return;
+    if (!groq) return;
 
     const lowerMessage = message.toLowerCase().trim();
     if (!lowerMessage.startsWith(BOT_NAME)) return;
