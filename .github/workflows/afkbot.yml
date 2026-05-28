@@ -33,5 +33,5 @@ jobs:
           SERVER_PORT: ${{ secrets.SERVER_PORT }}
           BOT_USERNAME: ${{ secrets.BOT_USERNAME }}
           MC_VERSION: ${{ secrets.MC_VERSION }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: node bot.js
