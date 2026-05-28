@@ -20,18 +20,21 @@ const BOT_NAME = (process.env.BOT_USERNAME || 'AfkBot1').toLowerCase();
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 
 // ============================================
-// GEMINI SETUP
+// GEMINI SETUP - Multiple models for fallback
 // ============================================
-let genAI = null;
-let model = null;
+const MODELS_TO_TRY = [
+    'gemini-2.5-flash',           // Best free option (2025)
+    'gemini-2.5-flash-lite',      // Backup
+    'gemini-2.0-flash-lite',      // Older but stable
+    'gemini-1.5-flash',           // Last resort
+    'gemini-1.5-flash-8b'         // Cheapest tier
+];
 
-if (GEMINI_KEY) {
-    try {
-        genAI = new GoogleGenerativeAI(GEMINI_KEY);
-        model = genAI.getGenerativeModel({ 
-            model: "gemini-2.0-flash",  // Fast & free
-            systemInstruction: `You are a Minecraft player named ${process.env.BOT_USERNAME || 'AfkBot1'}, currently AFK on an anarchy SMP server. 
-            
+let genAI = null;
+let models = [];
+
+const SYSTEM_INSTRUCTION = `You are a Minecraft player named ${process.env.BOT_USERNAME || 'AfkBot1'}, currently AFK on an anarchy SMP server.
+
 Rules:
 - ALWAYS respond in the SAME LANGUAGE the user wrote in (English, Bulgarian, Russian, Spanish, etc.)
 - Keep responses SHORT (under 100 characters when possible) - it's Minecraft chat
@@ -41,9 +44,26 @@ Rules:
 - If asked technical questions, answer briefly
 - Use lowercase mostly, like real Minecraft chat
 - Add some humor / banter when appropriate
-- Never mention you're an AI - you're just a player named ${process.env.BOT_USERNAME || 'AfkBot1'}`
-        });
-        console.log('✅ Gemini AI loaded');
+- Never mention you're an AI - you're just a player named ${process.env.BOT_USERNAME || 'AfkBot1'}`;
+
+if (GEMINI_KEY) {
+    try {
+        genAI = new GoogleGenerativeAI(GEMINI_KEY);
+        // Pre-load all models
+        for (const modelName of MODELS_TO_TRY) {
+            try {
+                models.push({
+                    name: modelName,
+                    instance: genAI.getGenerativeModel({
+                        model: modelName,
+                        systemInstruction: SYSTEM_INSTRUCTION
+                    })
+                });
+            } catch (e) {
+                console.log(`⚠️ Couldn't load ${modelName}: ${e.message}`);
+            }
+        }
+        console.log(`✅ Gemini AI loaded with ${models.length} models`);
     } catch (err) {
         console.log(`⚠️ Gemini failed to load: ${err.message}`);
     }
@@ -64,9 +84,13 @@ let isShuttingDown = false;
 let lastPacketTime = Date.now();
 const MAX_RECONNECTS = 50;
 
-// Rate limiting (avoid spam abuse)
+// Rate limiting per user
 const userCooldowns = new Map();
-const COOLDOWN_MS = 5000; // 5 seconds per user
+const COOLDOWN_MS = 8000; // 8 seconds per user (slower to avoid spam)
+
+// Global rate limiting (avoid hitting API limits)
+const recentRequests = [];
+const MAX_REQUESTS_PER_MINUTE = 10; // Conservative
 
 function log(msg) {
     const time = new Date().toLocaleTimeString();
@@ -74,32 +98,57 @@ function log(msg) {
 }
 
 // ============================================
-// AI CHAT HANDLER
+// AI CHAT HANDLER WITH FALLBACK
 // ============================================
 async function generateAIResponse(userMessage, username) {
-    if (!model) return null;
-    
-    try {
-        const result = await model.generateContent(
-            `Player "${username}" says to you: "${userMessage}"\n\nRespond as ${process.env.BOT_USERNAME || 'AfkBot1'} would, in the same language.`
-        );
-        let response = result.response.text().trim();
-        
-        // Clean up response for Minecraft chat
-        response = response.replace(/\*/g, ''); // No asterisks
-        response = response.replace(/\n+/g, ' '); // No newlines
-        response = response.replace(/\s+/g, ' '); // No double spaces
-        
-        // Minecraft chat limit is 256 chars
-        if (response.length > 250) {
-            response = response.substring(0, 247) + '...';
-        }
-        
-        return response;
-    } catch (err) {
-        log(`❌ AI error: ${err.message}`);
+    if (!models.length) return null;
+
+    // Check global rate limit
+    const now = Date.now();
+    while (recentRequests.length && recentRequests[0] < now - 60000) {
+        recentRequests.shift();
+    }
+    if (recentRequests.length >= MAX_REQUESTS_PER_MINUTE) {
+        log(`⏳ Global rate limit hit. Skipping.`);
         return null;
     }
+    recentRequests.push(now);
+
+    // Try each model until one works
+    for (const { name, instance } of models) {
+        try {
+            const result = await instance.generateContent(
+                `Player "${username}" says to you: "${userMessage}"\n\nRespond as ${process.env.BOT_USERNAME || 'AfkBot1'} would, in the same language.`
+            );
+            let response = result.response.text().trim();
+
+            response = response.replace(/\*/g, '');
+            response = response.replace(/\n+/g, ' ');
+            response = response.replace(/\s+/g, ' ');
+
+            if (response.length > 250) {
+                response = response.substring(0, 247) + '...';
+            }
+
+            log(`✅ Used model: ${name}`);
+            return response;
+        } catch (err) {
+            const msg = err.message || String(err);
+            if (msg.includes('429') || msg.includes('quota') || msg.includes('rate')) {
+                log(`⏭️ ${name} rate limited, trying next...`);
+                continue;
+            }
+            if (msg.includes('404') || msg.includes('not found')) {
+                log(`⏭️ ${name} not available, trying next...`);
+                continue;
+            }
+            log(`❌ AI error with ${name}: ${msg.substring(0, 200)}`);
+            continue;
+        }
+    }
+
+    log(`❌ All models failed`);
+    return null;
 }
 
 function isOnCooldown(username) {
@@ -110,7 +159,6 @@ function isOnCooldown(username) {
 
 function setCooldown(username) {
     userCooldowns.set(username, Date.now());
-    // Clean up old entries every 100 messages
     if (userCooldowns.size > 100) {
         const now = Date.now();
         for (const [user, time] of userCooldowns.entries()) {
@@ -120,49 +168,48 @@ function setCooldown(username) {
 }
 
 async function handleChatMessage(username, message) {
-    if (username === bot.username) return; // Ignore self
-    if (!model) return; // AI not available
-    
+    if (!bot || username === bot.username) return;
+    if (!models.length) return;
+
     const lowerMessage = message.toLowerCase().trim();
-    
-    // Check if bot name is mentioned at start
     if (!lowerMessage.startsWith(BOT_NAME)) return;
-    
-    // Extract the actual question (remove bot name)
+
     let question = message.substring(BOT_NAME.length).trim();
-    
-    // Remove common separators after the name
     question = question.replace(/^[,:\-\s]+/, '');
-    
+
     if (!question) {
-        // Just mentioned name with no question
         try { bot.chat(`yo ${username}`); } catch(e){}
         return;
     }
-    
-    // Rate limit
+
     if (isOnCooldown(username)) {
         log(`⏳ ${username} on cooldown`);
         return;
     }
     setCooldown(username);
-    
+
     log(`🤔 ${username} asked: "${question}"`);
-    
+
     const response = await generateAIResponse(question, username);
     if (response) {
         log(`💬 Responding: "${response}"`);
         try {
-            // Split into multiple messages if too long (256 char limit)
             const chunks = response.match(/.{1,250}/g) || [response];
             for (let i = 0; i < chunks.length; i++) {
                 setTimeout(() => {
                     try { if (bot) bot.chat(chunks[i]); } catch(e){}
-                }, i * 1500); // 1.5s delay between chunks
+                }, i * 1500);
             }
         } catch(e) {
             log(`Chat send error: ${e.message}`);
         }
+    } else {
+        // All models failed - send a fallback message
+        try {
+            const fallbacks = ["brb thinking", "wait wait", "uhh", "hmm", "1 sec", "lag", "wifi died"];
+            const fallback = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+            bot.chat(fallback);
+        } catch(e) {}
     }
 }
 
@@ -233,7 +280,6 @@ function setupEvents() {
         startHealthCheck();
     });
 
-    // 💬 CHAT HANDLER - This is where the magic happens
     bot.on('chat', async (username, message) => {
         log(`💬 <${username}> ${message}`);
         await handleChatMessage(username, message);
@@ -289,7 +335,6 @@ function startHealthCheck() {
     }, 30000);
 }
 
-// 👊 HIT EVERY 60 SECONDS (keeps bot active, prevents AFK kick)
 function startHitting() {
     if (hitInterval) clearInterval(hitInterval);
     log('👊 Hit mode started (every 60s)');
@@ -305,9 +350,6 @@ function startHitting() {
     }, 60000);
 }
 
-// ============================================
-// START
-// ============================================
 createBot();
 
 process.on('uncaughtException', (err) => log(`💥 Uncaught: ${err.message}`));
