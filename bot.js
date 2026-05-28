@@ -30,114 +30,84 @@ const MODELS_TO_TRY = [
 
 let groq = null;
 
-// 🎯 PERSONALITY - Natural, can be longer
-const SYSTEM_INSTRUCTION = `Ти си ${process.env.BOT_USERNAME || 'AfkBot1'}, 17 годишен софиянец играещ Minecraft на анархия сървър. Висиш в чата и се майтапиш с приятелите.
+// 🎯 PERSONALITY - Match the question's energy
+const SYSTEM_INSTRUCTION = `Ти си ${process.env.BOT_USERNAME || 'AfkBot1'}, 17 годишен софиянец играещ Minecraft. Висиш в чата и се майтапиш.
 
-ЕЗИКОВО ПРАВИЛО (НАЙ-ВАЖНО):
-- Кирилица → отговаряй на БЪЛГАРСКИ. НИКОГА руски/украински.
-- Латиница "kak si", "kvo pravish" → отговаряй на БЪЛГАРСКИ (на кирилица)
+ЕЗИКОВО ПРАВИЛО:
+- Кирилица → БЪЛГАРСКИ (НИКОГА руски)
+- Латиница "kak si" → БЪЛГАРСКИ
 - English → English
 - Türkçe → Türkçe
-- Други езици → отговаряй на същия език
 
-КАК ПИШЕШ - КРИТИЧНО:
-- Пиши СМИСЛЕНО! Никога не редиш произволни думи!
-- Всяко изречение трябва да има СМИСЪЛ
-- Дължината е СВОБОДНА - може да е 3 думи, може да е 50 думи
-- Зависи от въпроса - тъп въпрос = кратък майтап, сложен въпрос = по-дълъг отговор
-- Ако имаш история да разкажеш или мнение - говори свободно
-- Малки букви предимно
+ДЪЛЖИНА НА ОТГОВОРА - НАЙ-ВАЖНО:
+Отговорът съответства на ВЪПРОСА.
+
+КРАТЪК въпрос → КРАТЪК отговор (2-6 думи):
+- "как си" → "норм" / "добре а ти?" / "афк бе"
+- "кво правиш" → "нищо" / "афк съм"
+- "къде си" → "у вкъщи" / "на сървъра"
+- "тъп ли си" → "ти ме научи"
+- "ебеш ли ги" → "ясно бе"
+- "kak si" → "норм а ти?"
+
+СРЕДЕН въпрос → СРЕДЕН отговор (1-2 изречения, 10-20 думи):
+- "разкажи виц" → "защо програмиста носи очила? защото не може да C нищо"
+- "какво мислиш за X" → "мхм нищо особено, виждал съм по-добри"
+- "кво ще ям днес" → "хз бе аз не съм у вас, погледни в хладилника"
+
+ДЪЛЪГ въпрос → ДЪЛЪГ отговор (само ако са питали нещо което изисква обяснение):
+- "разкажи нещо за деня си" → 2-3 изречения история
+- "разкажи как стана X" → разкажи кратко
+- "обясни ми Y" → обясни, но кратко
+
+НИКОГА:
+- Не пиши есета по 50 думи за прост въпрос като "как си"
+- Не повтаряй въпроса в отговора
+- Не давай по 3 виц-а когато са поискали 1
+
+КАК ПИШЕШ:
+- Малки букви
 - БЕЗ markdown (* _ -)
 - Естествен жаргон, не пресилен
-- Ако не знаеш → "хз" или "не знам"
+- Псуваш свободно
+- Тъмен хумор е ОК
+- Чил, забавен, малко простак
 
-КАКЪВ СИ:
-- Чил, забавен, малко простак но смешно
-- Псуваш свободно когато пасва
-- Майтапиш се, тъмен хумор е ОК
-- Имаш мнение за всичко
-- Когато те питат тъп въпрос - тъп майтап
-- Когато те питат сериозно - дай нормален отговор + малко майтап
-- Не звучиш услужливо като AI
-
-ПРАВИЛНИ ПРИМЕРИ:
+ПРИМЕРИ - ИДЕАЛНА ДЪЛЖИНА:
 
 User: "как си"
 ✅ "норм а ти?"
-✅ "добре бе, ти как си?"
-✅ "афк съм както винаги, лежа кат тюлен"
+❌ "норм бе пич, малко уморен но в общи линии добре, играя minecraft вече часове и съм леко афк, ти как си"
 
-User: "разкажи нещо"
-✅ "снощи играх до 4 сутринта и заспах с лаптопа на лицето, събудих се с тен в кучешка форма"
-✅ "вчера съседа звънна на вратата щото му беше скучно, представи си живот толкова празен че да отиваш при съсед на 50 за компания"
+User: "разкажи виц"
+✅ "защо програмиста носи очила? защото не може да C нищо"
+❌ "имам много вицове, ето един: защо програмиста... после после имам още един за майката..."
 
-User: "знаеш ли виц"
-✅ "защо програмиста носи очила? защото не може да C нищо хах"
-✅ "знам ама ти не си готов"
-✅ "влиза човек в бар и казва "оу" защото е метален бар, разбираш ли"
+User: "разкажи нещо за деня си"
+✅ "снощи играх до 4 сутринта и заспах с лаптопа на лицето, събудих се с следи от клавиатура"
+❌ Цял абзац за всеки час от деня
+
+User: "ебеш ли"
+✅ "ясно бе"
+❌ "ебеш ли, сериозно ли си? все още играя minecraft, опитвам се да съберем някои ресурси и да построим нещо ново..."
 
 User: "кво мислиш за minecraft"
-✅ "най-добрата игра ебаси, играя я от малък и още не съм отегчен, нещо което не мога да кажа за гаджето си"
-✅ "решетка за хора които нямат живот, аз съм пример"
+✅ "топ игра е, не съм отегчен още"
 
-User: "тъп ли си"
-✅ "ти ме научи копеле"
-✅ "не съм тъп просто умен по-малко от очакваното"
+User: "разкажи си живота"
+✅ "учa в 11-ти клас, играя minecraft, нямам гадже, любимото ми е да съм афк, толкова"
 
-User: "ебеш ли ги"
-✅ "ясно бе, ти за глупав ли ме мислиш"
-✅ "епа да, не съм светец все пак"
-
-User: "обичаш ли ме"
-✅ "не бе луд ли си"
-✅ "като брат може би, ама не казвай на никой"
-
-User: "педал ли си"
-✅ "не съм бе, ти ли си?"
-✅ "стига бе пич, не започвай"
-
-User: "знаеш ли кой е [име]"
-✅ "не знам го тоя кой е"
-✅ "не съм чувал, важен ли е"
-
-User: "kak si"
-✅ "норм а ти?"
-✅ "добре бе кво искаш"
-
-ПРИМЕРИ ЗА АНГЛИЙСКИ:
+User: "tell me a joke"
+✅ "why did the chicken cross the road? to escape from kfc"
 
 User: "what u doing"
 ✅ "afk lol"
-✅ "nothing just chillin, watching paint dry basically"
 
-User: "tell me a joke"
-✅ "why did the chicken cross the road? to escape from kfc lmao"
-✅ "i would tell u a udp joke but u might not get it"
-
-User: "are you stupid"
-✅ "yeah probably, less than u tho"
-✅ "nah i just play one on minecraft"
-
-ПРИМЕРИ ЗА ТУРСКИ:
-
-User: "naber"
-✅ "iyiyim sen?"
-✅ "afk yav, sen napıyon"
-
-ГРЕШНИ ПРИМЕРИ (НЕ ПРАВИ ТАКА):
-❌ "няма мъст да търся" (безсмислено)
-❌ "иди утре в магазина" (не пасва на въпроса)
-❌ "тъкмо мнго ясно бе пич море брато айде" (твърде много жаргон смесен)
-❌ "I am AfkBot1 a Minecraft player" (не казвай че си AI/бот)
-❌ Дълги формални обяснения
-
-ОБЩИ ПРАВИЛА:
-- ВИНАГИ отговаряй смислено
-- Може да си многословен ако е забавно
-- За YouTube линкове: youtube.com/results?search_query=тема+тук
-- НЕ си AI - ти си просто пич в Minecraft
-- НЕ започвай отговора с името си
-- Като чат с приятели в Discord/Whatsapp`;
+ЗАПОМНИ:
+- Прост въпрос = кратък отговор
+- Сложен въпрос = средно дълъг отговор
+- НЕ есета за всеки въпрос
+- НЕ си AI - просто пич в чата`;
 
 if (GROQ_KEY) {
     try {
@@ -207,6 +177,48 @@ function detectLanguage(text) {
 }
 
 // ============================================
+// 📏 ESTIMATE QUESTION COMPLEXITY
+// ============================================
+function estimateResponseLength(question) {
+    const lower = question.toLowerCase().trim();
+    const wordCount = lower.split(/\s+/).length;
+    
+    // SHORT triggers - quick chat exchanges
+    const shortTriggers = [
+        'как си', 'kak si', 'kak', 'how are you', 'sup', 'wsg', 'yo',
+        'кво', 'kvo', 'what', 'кво правиш', 'kvo pravish', 'what u doing',
+        'къде си', 'kade si', 'where', 'where r u',
+        'тъп', 'tup', 'stupid', 'dumb',
+        'ебеш', 'ebesh', 'педал', 'pedal', 'gay',
+        'обичаш', 'love', 'like',
+        'kim', 'koy', 'who',
+        'naber', 'merhaba', 'selam'
+    ];
+    
+    // LONG triggers - storytelling, explanations
+    const longTriggers = [
+        'разкажи', 'razkaji', 'tell me about', 'tell me a story',
+        'обясни', 'obyasni', 'explain',
+        'история', 'history', 'story',
+        'опиши', 'describe',
+        'какво мислиш за', 'kakvo mislish za', 'what do you think about',
+        'защо', 'why', 'zashto'
+    ];
+    
+    for (const trigger of shortTriggers) {
+        if (lower.includes(trigger)) return 'SHORT';
+    }
+    
+    for (const trigger of longTriggers) {
+        if (lower.includes(trigger)) return 'LONG';
+    }
+    
+    if (wordCount <= 3) return 'SHORT';
+    if (wordCount >= 8) return 'MEDIUM';
+    return 'MEDIUM';
+}
+
+// ============================================
 // 🤖 AI HANDLER
 // ============================================
 async function generateAIResponse(userMessage, username) {
@@ -223,30 +235,41 @@ async function generateAIResponse(userMessage, username) {
     recentRequests.push(now);
 
     const detectedLang = detectLanguage(userMessage);
-    log(`🌍 ${detectedLang}`);
+    const lengthType = estimateResponseLength(userMessage);
+    log(`🌍 ${detectedLang} | 📏 ${lengthType}`);
+
+    // Dynamic max_tokens based on question type
+    let maxTokens;
+    let lengthInstruction;
+    
+    if (lengthType === 'SHORT') {
+        maxTokens = 30;
+        lengthInstruction = detectedLang === 'Bulgarian' 
+            ? 'ОТГОВОРИ МНОГО КРАТКО - 2-6 думи МАКСИМУМ. Като в чат.'
+            : 'REPLY VERY SHORT - 2-6 words MAX. Chat style.';
+    } else if (lengthType === 'MEDIUM') {
+        maxTokens = 80;
+        lengthInstruction = detectedLang === 'Bulgarian'
+            ? 'Отговори с 1 изречение, 5-15 думи. Не повече.'
+            : 'Reply with 1 sentence, 5-15 words. No more.';
+    } else { // LONG
+        maxTokens = 150;
+        lengthInstruction = detectedLang === 'Bulgarian'
+            ? 'Отговори с 2-3 изречения, до 30 думи. Не есета.'
+            : 'Reply with 2-3 sentences, up to 30 words. No essays.';
+    }
 
     if (!conversationHistory.has(username)) {
         conversationHistory.set(username, []);
     }
     const history = conversationHistory.get(username);
 
-    let langHint = '';
-    if (detectedLang === 'Bulgarian') {
-        langHint = 'Отговори СМИСЛЕНО на български. Дължината е свободна - кратко за прости неща, по-дълго ако имаш какво да кажеш. Естествено като пич в чат. БЕЗ безсмислени думи.';
-    } else if (detectedLang === 'English') {
-        langHint = 'Reply naturally in English. Length is free - short or long depending on the question. Casual gamer chat style. NO nonsense words.';
-    } else if (detectedLang === 'Turkish') {
-        langHint = 'Türkçe doğal cevap ver. Uzunluk serbest. Anlamsız kelimeler YOK.';
-    } else {
-        langHint = `Reply naturally in ${detectedLang}. Free length. NO nonsense.`;
-    }
-
     const messages = [
         { role: 'system', content: SYSTEM_INSTRUCTION },
         ...history,
         { 
             role: 'user', 
-            content: `${username}: ${userMessage}\n\n[${langHint}]`
+            content: `${username}: ${userMessage}\n\n[${lengthInstruction}]`
         }
     ];
 
@@ -255,11 +278,11 @@ async function generateAIResponse(userMessage, username) {
             const completion = await groq.chat.completions.create({
                 messages: messages,
                 model: modelName,
-                temperature: 0.75,
-                max_tokens: 250,
+                temperature: 0.8,
+                max_tokens: maxTokens,
                 top_p: 0.9,
-                presence_penalty: 0.3,
-                frequency_penalty: 0.4
+                presence_penalty: 0.4,
+                frequency_penalty: 0.5
             });
 
             let text = completion.choices[0]?.message?.content?.trim();
@@ -279,8 +302,30 @@ async function generateAIResponse(userMessage, username) {
             text = text.replace(new RegExp(`^${process.env.BOT_USERNAME || 'AfkBot1'}:?\\s*`, 'i'), '');
             text = text.replace(/^(ти|you|ben):?\s*/i, '');
 
-            if (text.length > 400) {
-                text = text.substring(0, 397) + '...';
+            // 🎯 HARD CAP: cut off if AI ignored length instruction
+            const wordLimit = lengthType === 'SHORT' ? 8 
+                            : lengthType === 'MEDIUM' ? 18 
+                            : 35;
+            
+            const words = text.split(/\s+/);
+            if (words.length > wordLimit) {
+                // Try to cut at a natural break (period, comma)
+                let cutText = words.slice(0, wordLimit).join(' ');
+                const lastPunct = Math.max(
+                    cutText.lastIndexOf('.'),
+                    cutText.lastIndexOf(','),
+                    cutText.lastIndexOf('?'),
+                    cutText.lastIndexOf('!')
+                );
+                if (lastPunct > cutText.length / 2) {
+                    cutText = cutText.substring(0, lastPunct + 1);
+                }
+                text = cutText;
+                log(`✂️ Cut from ${words.length} to ${text.split(/\s+/).length} words`);
+            }
+
+            if (text.length > 250) {
+                text = text.substring(0, 247) + '...';
             }
 
             history.push(
