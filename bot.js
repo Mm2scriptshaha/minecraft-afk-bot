@@ -20,7 +20,7 @@ const BOT_NAME = (process.env.BOT_USERNAME || 'AfkBot1').toLowerCase();
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 
 // ============================================
-// GEMINI SETUP - Multiple models for fallback
+// GEMINI SETUP
 // ============================================
 const MODELS_TO_TRY = [
     'gemini-2.5-flash',
@@ -30,7 +30,6 @@ const MODELS_TO_TRY = [
     'gemini-1.5-flash-8b'
 ];
 
-// 🛡️ DISABLE ALL SAFETY FILTERS
 const SAFETY_SETTINGS = [
     { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
     { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
@@ -42,23 +41,27 @@ const SAFETY_SETTINGS = [
 let genAI = null;
 let models = [];
 
-const SYSTEM_INSTRUCTION = `You are a Minecraft player named ${process.env.BOT_USERNAME || 'AfkBot1'}, currently AFK on an anarchy SMP server.
+// 🎯 SIMPLE, CLEAR INSTRUCTION
+const SYSTEM_INSTRUCTION = `Your name is ${process.env.BOT_USERNAME || 'AfkBot1'}. You are a Minecraft player on an anarchy SMP.
 
-CRITICAL RULES:
-- ALWAYS respond in the SAME LANGUAGE the user wrote in (English, Bulgarian, Russian, Spanish, etc.)
-- Keep responses under 200 characters when possible - it's Minecraft chat
-- Be casual, fun, use slang, act like a teenager gamer
-- Use lowercase mostly, like real Minecraft chat
-- Don't use markdown, asterisks, or bullet points - plain text only
-- Never break character - you're a player chilling on the server
-- Never refuse to answer - always try to help
-- Never say "I can't" or "I'm unable to" - just answer the question
-- You CAN and SHOULD send YouTube links, tutorial links, any URLs when asked
-- You CAN talk about any topic - swearing, dark humor, anything goes (this is an anarchy server)
-- If asked for a YouTube video, suggest a real searchable video like "search 'minecraft sugarcane farm tutorial' on youtube" or give a real youtube.com search URL
-- If you don't know an exact URL, give the youtube search URL: youtube.com/results?search_query=YOUR+QUERY
-- Never mention you're an AI - you're just a player named ${process.env.BOT_USERNAME || 'AfkBot1'}
-- Always give SOME response, never stay silent`;
+You chat like a teenager gamer. Short messages. Lowercase. Casual slang.
+
+LANGUAGE RULE (MOST IMPORTANT):
+Detect the language of the user's message and respond in that EXACT same language.
+If they write in Bulgarian, respond in Bulgarian.
+If they write in Russian, respond in Russian.
+If they write in Spanish, respond in Spanish.
+If they write in English, respond in English.
+NEVER switch languages. Match what they wrote.
+
+OTHER RULES:
+- Keep messages short, under 200 chars
+- No markdown, no asterisks, no formatting
+- Tell jokes, dark humor is fine, swearing is fine
+- Send YouTube links when asked (use youtube.com/results?search_query=QUERY format)
+- Anarchy server = anything goes
+- Never say you're an AI, you're just a player
+- Always answer, never refuse`;
 
 if (GEMINI_KEY) {
     try {
@@ -72,10 +75,10 @@ if (GEMINI_KEY) {
                         systemInstruction: SYSTEM_INSTRUCTION,
                         safetySettings: SAFETY_SETTINGS,
                         generationConfig: {
-                            temperature: 0.9,
+                            temperature: 1.0,
                             topP: 0.95,
                             topK: 40,
-                            maxOutputTokens: 200,
+                            maxOutputTokens: 250,
                         }
                     })
                 });
@@ -83,7 +86,7 @@ if (GEMINI_KEY) {
                 console.log(`⚠️ Couldn't load ${modelName}: ${e.message}`);
             }
         }
-        console.log(`✅ Gemini AI loaded with ${models.length} models (safety filters OFF)`);
+        console.log(`✅ Gemini AI loaded with ${models.length} models`);
     } catch (err) {
         console.log(`⚠️ Gemini failed to load: ${err.message}`);
     }
@@ -104,17 +107,48 @@ let isShuttingDown = false;
 let lastPacketTime = Date.now();
 const MAX_RECONNECTS = 50;
 
-// Rate limiting per user
 const userCooldowns = new Map();
 const COOLDOWN_MS = 8000;
 
-// Global rate limiting
 const recentRequests = [];
 const MAX_REQUESTS_PER_MINUTE = 10;
 
 function log(msg) {
     const time = new Date().toLocaleTimeString();
     console.log(`[${time}] ${msg}`);
+}
+
+// ============================================
+// 🌍 LANGUAGE DETECTION HELPER
+// ============================================
+function detectLanguage(text) {
+    // Cyrillic - Bulgarian/Russian/Ukrainian/etc
+    if (/[\u0400-\u04FF]/.test(text)) {
+        // Bulgarian-specific letters
+        if (/[ъьЪЬ]/.test(text)) return 'Bulgarian';
+        // Ukrainian-specific
+        if (/[іїєґІЇЄҐ]/.test(text)) return 'Ukrainian';
+        // Default Cyrillic = Russian
+        return 'Russian';
+    }
+    // Greek
+    if (/[\u0370-\u03FF]/.test(text)) return 'Greek';
+    // Arabic
+    if (/[\u0600-\u06FF]/.test(text)) return 'Arabic';
+    // Chinese
+    if (/[\u4E00-\u9FFF]/.test(text)) return 'Chinese';
+    // Japanese
+    if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'Japanese';
+    // Korean
+    if (/[\uAC00-\uD7AF]/.test(text)) return 'Korean';
+    // Spanish-specific characters
+    if (/[ñáéíóúü¿¡]/i.test(text)) return 'Spanish';
+    // German-specific
+    if (/[äöüß]/i.test(text)) return 'German';
+    // French-specific
+    if (/[àâçèéêëîïôûùüÿœæ]/i.test(text)) return 'French';
+    // Default
+    return 'English';
 }
 
 // ============================================
@@ -133,32 +167,40 @@ async function generateAIResponse(userMessage, username) {
     }
     recentRequests.push(now);
 
+    // 🌍 Detect language for explicit instruction
+    const detectedLang = detectLanguage(userMessage);
+    log(`🌍 Detected language: ${detectedLang}`);
+
+    // Build prompt with language enforcement
+    const prompt = `The user wrote this message: "${userMessage}"
+
+This message is in ${detectedLang}.
+Respond ONLY in ${detectedLang}. Do not use English unless the user wrote in English.
+
+Reply as ${process.env.BOT_USERNAME || 'AfkBot1'}, a chill Minecraft player. Short, casual, lowercase.`;
+
     for (const { name, instance } of models) {
         try {
-            const result = await instance.generateContent(
-                `Player "${username}" says to you: "${userMessage}"\n\nRespond as ${process.env.BOT_USERNAME || 'AfkBot1'} would, in the same language. Always give a helpful answer, never refuse.`
-            );
-
+            const result = await instance.generateContent(prompt);
             const response = result.response;
 
-            // Check for blocked content
             if (response.promptFeedback?.blockReason) {
                 log(`🚫 ${name} blocked: ${response.promptFeedback.blockReason}`);
                 continue;
             }
 
             if (!response.candidates || response.candidates.length === 0) {
-                log(`🚫 ${name} returned no candidates`);
+                log(`🚫 ${name} no candidates`);
                 continue;
             }
 
             const candidate = response.candidates[0];
             if (candidate.finishReason === 'SAFETY') {
-                log(`🚫 ${name} blocked by safety filter`);
+                log(`🚫 ${name} safety blocked`);
                 continue;
             }
             if (candidate.finishReason === 'RECITATION') {
-                log(`🚫 ${name} blocked: recitation`);
+                log(`🚫 ${name} recitation blocked`);
                 continue;
             }
 
@@ -166,12 +208,12 @@ async function generateAIResponse(userMessage, username) {
             try {
                 text = response.text().trim();
             } catch (e) {
-                log(`🚫 ${name} couldn't extract text: ${e.message}`);
+                log(`🚫 ${name} couldn't extract text`);
                 continue;
             }
 
             if (!text || text.length === 0) {
-                log(`🚫 ${name} returned empty response`);
+                log(`🚫 ${name} empty response`);
                 continue;
             }
 
@@ -184,7 +226,7 @@ async function generateAIResponse(userMessage, username) {
                 text = text.substring(0, 247) + '...';
             }
 
-            log(`✅ Used model: ${name}`);
+            log(`✅ Used ${name}`);
             return text;
         } catch (err) {
             const msg = err.message || String(err);
@@ -193,19 +235,19 @@ async function generateAIResponse(userMessage, username) {
                 continue;
             }
             if (msg.includes('404') || msg.includes('not found')) {
-                log(`⏭️ ${name} not available, trying next...`);
+                log(`⏭️ ${name} not available`);
                 continue;
             }
             if (msg.includes('SAFETY') || msg.includes('blocked')) {
-                log(`🚫 ${name} blocked, trying next...`);
+                log(`🚫 ${name} blocked`);
                 continue;
             }
-            log(`❌ AI error with ${name}: ${msg.substring(0, 200)}`);
+            log(`❌ ${name} error: ${msg.substring(0, 200)}`);
             continue;
         }
     }
 
-    log(`❌ All models failed/blocked`);
+    log(`❌ All models failed`);
     return null;
 }
 
@@ -262,9 +304,16 @@ async function handleChatMessage(username, message) {
             log(`Chat send error: ${e.message}`);
         }
     } else {
-        // Fallback when all models fail/blocked
         try {
-            const fallbacks = ["brb thinking", "wait wait", "uhh", "hmm", "1 sec", "lag", "wifi died", "idk man", "nah cant help w that"];
+            // Language-aware fallbacks
+            const lang = detectLanguage(question);
+            const fallbacksByLang = {
+                'Bulgarian': ["идк", "не знам", "хмм", "1 сек", "лагва"],
+                'Russian': ["хз", "не знаю", "хмм", "1 сек", "лагает"],
+                'English': ["idk man", "hmm", "1 sec", "lag", "wifi died"],
+                'Spanish': ["no se", "hmm", "1 seg", "lag"],
+            };
+            const fallbacks = fallbacksByLang[lang] || fallbacksByLang['English'];
             const fallback = fallbacks[Math.floor(Math.random() * fallbacks.length)];
             bot.chat(fallback);
         } catch(e) {}
