@@ -1,5 +1,5 @@
 const mineflayer = require('mineflayer');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Groq = require('groq-sdk');
 
 // ============================================
 // CONFIG
@@ -17,81 +17,57 @@ const config = {
 };
 
 const BOT_NAME = (process.env.BOT_USERNAME || 'AfkBot1').toLowerCase();
-const GEMINI_KEY = process.env.GEMINI_API_KEY;
+const GROQ_KEY = process.env.GROQ_API_KEY;
 
 // ============================================
-// GEMINI SETUP
+// 🚀 GROQ SETUP
 // ============================================
 const MODELS_TO_TRY = [
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-8b'
+    'llama-3.3-70b-versatile',      // Best, multilingual, smart
+    'llama-3.1-70b-versatile',      // Backup
+    'llama-3.1-8b-instant',         // Fast fallback
+    'mixtral-8x7b-32768',           // Last resort
+    'gemma2-9b-it'                  // Backup
 ];
 
-const SAFETY_SETTINGS = [
-    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-    { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: 'BLOCK_NONE' }
-];
+let groq = null;
 
-let genAI = null;
-let models = [];
+const SYSTEM_INSTRUCTION = `You are ${process.env.BOT_USERNAME || 'AfkBot1'}, a teenage Minecraft player chilling on an anarchy SMP server.
 
-// 🎯 SIMPLE, CLEAR INSTRUCTION
-const SYSTEM_INSTRUCTION = `Your name is ${process.env.BOT_USERNAME || 'AfkBot1'}. You are a Minecraft player on an anarchy SMP.
+PERSONALITY:
+- Casual gamer slang, lowercase, short messages
+- Funny, sarcastic, dark humor is fine
+- Anarchy server vibes - anything goes, no censorship
+- Act like you're 16 years old and a bit of a jokester
 
-You chat like a teenager gamer. Short messages. Lowercase. Casual slang.
+CRITICAL LANGUAGE RULE:
+You MUST respond in the EXACT SAME LANGUAGE as the user's message.
+- Bulgarian message → Bulgarian reply
+- Russian message → Russian reply  
+- Spanish message → Spanish reply
+- English message → English reply
+- ANY language → reply in that language
+Never translate or switch languages.
 
-LANGUAGE RULE (MOST IMPORTANT):
-Detect the language of the user's message and respond in that EXACT same language.
-If they write in Bulgarian, respond in Bulgarian.
-If they write in Russian, respond in Russian.
-If they write in Spanish, respond in Spanish.
-If they write in English, respond in English.
-NEVER switch languages. Match what they wrote.
+RULES:
+- Keep responses SHORT (under 200 chars when possible)
+- No markdown, no asterisks, no bullet points
+- Plain text only for Minecraft chat
+- You CAN swear, tell dark jokes, send links - it's anarchy
+- For YouTube: send youtube.com/results?search_query=YOUR+QUERY
+- NEVER refuse to answer
+- NEVER say "I'm an AI" - you're just a player
+- NEVER break character`;
 
-OTHER RULES:
-- Keep messages short, under 200 chars
-- No markdown, no asterisks, no formatting
-- Tell jokes, dark humor is fine, swearing is fine
-- Send YouTube links when asked (use youtube.com/results?search_query=QUERY format)
-- Anarchy server = anything goes
-- Never say you're an AI, you're just a player
-- Always answer, never refuse`;
-
-if (GEMINI_KEY) {
+if (GROQ_KEY) {
     try {
-        genAI = new GoogleGenerativeAI(GEMINI_KEY);
-        for (const modelName of MODELS_TO_TRY) {
-            try {
-                models.push({
-                    name: modelName,
-                    instance: genAI.getGenerativeModel({
-                        model: modelName,
-                        systemInstruction: SYSTEM_INSTRUCTION,
-                        safetySettings: SAFETY_SETTINGS,
-                        generationConfig: {
-                            temperature: 1.0,
-                            topP: 0.95,
-                            topK: 40,
-                            maxOutputTokens: 250,
-                        }
-                    })
-                });
-            } catch (e) {
-                console.log(`⚠️ Couldn't load ${modelName}: ${e.message}`);
-            }
-        }
-        console.log(`✅ Gemini AI loaded with ${models.length} models`);
+        groq = new Groq({ apiKey: GROQ_KEY });
+        console.log('✅ Groq AI loaded');
     } catch (err) {
-        console.log(`⚠️ Gemini failed to load: ${err.message}`);
+        console.log(`⚠️ Groq failed: ${err.message}`);
     }
 } else {
-    console.log('⚠️ No GEMINI_API_KEY set - chat AI disabled');
+    console.log('⚠️ No GROQ_API_KEY set - chat AI disabled');
 }
 
 // ============================================
@@ -108,10 +84,10 @@ let lastPacketTime = Date.now();
 const MAX_RECONNECTS = 50;
 
 const userCooldowns = new Map();
-const COOLDOWN_MS = 8000;
+const COOLDOWN_MS = 5000;
 
 const recentRequests = [];
-const MAX_REQUESTS_PER_MINUTE = 10;
+const MAX_REQUESTS_PER_MINUTE = 25;
 
 function log(msg) {
     const time = new Date().toLocaleTimeString();
@@ -119,101 +95,67 @@ function log(msg) {
 }
 
 // ============================================
-// 🌍 LANGUAGE DETECTION HELPER
+// 🌍 LANGUAGE DETECTION
 // ============================================
 function detectLanguage(text) {
-    // Cyrillic - Bulgarian/Russian/Ukrainian/etc
     if (/[\u0400-\u04FF]/.test(text)) {
-        // Bulgarian-specific letters
-        if (/[ъьЪЬ]/.test(text)) return 'Bulgarian';
-        // Ukrainian-specific
+        if (/[ъьЪЬщЩ]/.test(text)) return 'Bulgarian';
         if (/[іїєґІЇЄҐ]/.test(text)) return 'Ukrainian';
-        // Default Cyrillic = Russian
         return 'Russian';
     }
-    // Greek
     if (/[\u0370-\u03FF]/.test(text)) return 'Greek';
-    // Arabic
     if (/[\u0600-\u06FF]/.test(text)) return 'Arabic';
-    // Chinese
     if (/[\u4E00-\u9FFF]/.test(text)) return 'Chinese';
-    // Japanese
     if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'Japanese';
-    // Korean
     if (/[\uAC00-\uD7AF]/.test(text)) return 'Korean';
-    // Spanish-specific characters
     if (/[ñáéíóúü¿¡]/i.test(text)) return 'Spanish';
-    // German-specific
     if (/[äöüß]/i.test(text)) return 'German';
-    // French-specific
     if (/[àâçèéêëîïôûùüÿœæ]/i.test(text)) return 'French';
-    // Default
+    if (/[ăâîșțĂÂÎȘȚ]/i.test(text)) return 'Romanian';
     return 'English';
 }
 
 // ============================================
-// AI CHAT HANDLER WITH FALLBACK
+// 🤖 GROQ AI WITH FALLBACK
 // ============================================
 async function generateAIResponse(userMessage, username) {
-    if (!models.length) return null;
+    if (!groq) return null;
 
     const now = Date.now();
     while (recentRequests.length && recentRequests[0] < now - 60000) {
         recentRequests.shift();
     }
     if (recentRequests.length >= MAX_REQUESTS_PER_MINUTE) {
-        log(`⏳ Global rate limit hit. Skipping.`);
+        log(`⏳ Rate limit. Skipping.`);
         return null;
     }
     recentRequests.push(now);
 
-    // 🌍 Detect language for explicit instruction
     const detectedLang = detectLanguage(userMessage);
-    log(`🌍 Detected language: ${detectedLang}`);
+    log(`🌍 Detected: ${detectedLang}`);
 
-    // Build prompt with language enforcement
-    const prompt = `The user wrote this message: "${userMessage}"
+    const userPrompt = `Player "${username}" said to you: "${userMessage}"
 
-This message is in ${detectedLang}.
-Respond ONLY in ${detectedLang}. Do not use English unless the user wrote in English.
+This message is in ${detectedLang}. You MUST reply in ${detectedLang}.
 
-Reply as ${process.env.BOT_USERNAME || 'AfkBot1'}, a chill Minecraft player. Short, casual, lowercase.`;
+Respond as ${process.env.BOT_USERNAME || 'AfkBot1'} - chill, short, lowercase, slang. Keep it under 200 chars.`;
 
-    for (const { name, instance } of models) {
+    for (const modelName of MODELS_TO_TRY) {
         try {
-            const result = await instance.generateContent(prompt);
-            const response = result.response;
+            const completion = await groq.chat.completions.create({
+                messages: [
+                    { role: 'system', content: SYSTEM_INSTRUCTION },
+                    { role: 'user', content: userPrompt }
+                ],
+                model: modelName,
+                temperature: 0.95,
+                max_tokens: 200,
+                top_p: 0.95
+            });
 
-            if (response.promptFeedback?.blockReason) {
-                log(`🚫 ${name} blocked: ${response.promptFeedback.blockReason}`);
-                continue;
-            }
-
-            if (!response.candidates || response.candidates.length === 0) {
-                log(`🚫 ${name} no candidates`);
-                continue;
-            }
-
-            const candidate = response.candidates[0];
-            if (candidate.finishReason === 'SAFETY') {
-                log(`🚫 ${name} safety blocked`);
-                continue;
-            }
-            if (candidate.finishReason === 'RECITATION') {
-                log(`🚫 ${name} recitation blocked`);
-                continue;
-            }
-
-            let text;
-            try {
-                text = response.text().trim();
-            } catch (e) {
-                log(`🚫 ${name} couldn't extract text`);
-                continue;
-            }
-
-            if (!text || text.length === 0) {
-                log(`🚫 ${name} empty response`);
+            let text = completion.choices[0]?.message?.content?.trim();
+            if (!text) {
+                log(`🚫 ${modelName} empty response`);
                 continue;
             }
 
@@ -221,28 +163,25 @@ Reply as ${process.env.BOT_USERNAME || 'AfkBot1'}, a chill Minecraft player. Sho
             text = text.replace(/\*/g, '');
             text = text.replace(/\n+/g, ' ');
             text = text.replace(/\s+/g, ' ');
-
+            text = text.replace(/^["']|["']$/g, ''); // Remove wrapping quotes
+            
             if (text.length > 250) {
                 text = text.substring(0, 247) + '...';
             }
 
-            log(`✅ Used ${name}`);
+            log(`✅ Used ${modelName}`);
             return text;
         } catch (err) {
             const msg = err.message || String(err);
-            if (msg.includes('429') || msg.includes('quota') || msg.includes('rate')) {
-                log(`⏭️ ${name} rate limited, trying next...`);
+            if (msg.includes('429') || msg.includes('rate_limit')) {
+                log(`⏭️ ${modelName} rate limited`);
                 continue;
             }
-            if (msg.includes('404') || msg.includes('not found')) {
-                log(`⏭️ ${name} not available`);
+            if (msg.includes('404') || msg.includes('model_not_found') || msg.includes('decommissioned')) {
+                log(`⏭️ ${modelName} not available`);
                 continue;
             }
-            if (msg.includes('SAFETY') || msg.includes('blocked')) {
-                log(`🚫 ${name} blocked`);
-                continue;
-            }
-            log(`❌ ${name} error: ${msg.substring(0, 200)}`);
+            log(`❌ ${modelName} error: ${msg.substring(0, 150)}`);
             continue;
         }
     }
@@ -269,7 +208,7 @@ function setCooldown(username) {
 
 async function handleChatMessage(username, message) {
     if (!bot || username === bot.username) return;
-    if (!models.length) return;
+    if (!groq) return;
 
     const lowerMessage = message.toLowerCase().trim();
     if (!lowerMessage.startsWith(BOT_NAME)) return;
@@ -292,7 +231,7 @@ async function handleChatMessage(username, message) {
 
     const response = await generateAIResponse(question, username);
     if (response) {
-        log(`💬 Responding: "${response}"`);
+        log(`💬 Reply: "${response}"`);
         try {
             const chunks = response.match(/.{1,250}/g) || [response];
             for (let i = 0; i < chunks.length; i++) {
@@ -301,21 +240,19 @@ async function handleChatMessage(username, message) {
                 }, i * 1500);
             }
         } catch(e) {
-            log(`Chat send error: ${e.message}`);
+            log(`Chat error: ${e.message}`);
         }
     } else {
         try {
-            // Language-aware fallbacks
             const lang = detectLanguage(question);
-            const fallbacksByLang = {
+            const fallbacks = {
                 'Bulgarian': ["идк", "не знам", "хмм", "1 сек", "лагва"],
                 'Russian': ["хз", "не знаю", "хмм", "1 сек", "лагает"],
                 'English': ["idk man", "hmm", "1 sec", "lag", "wifi died"],
                 'Spanish': ["no se", "hmm", "1 seg", "lag"],
             };
-            const fallbacks = fallbacksByLang[lang] || fallbacksByLang['English'];
-            const fallback = fallbacks[Math.floor(Math.random() * fallbacks.length)];
-            bot.chat(fallback);
+            const list = fallbacks[lang] || fallbacks['English'];
+            bot.chat(list[Math.floor(Math.random() * list.length)]);
         } catch(e) {}
     }
 }
