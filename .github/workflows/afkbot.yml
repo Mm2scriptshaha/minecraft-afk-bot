@@ -33,5 +33,9 @@ jobs:
           SERVER_PORT: ${{ secrets.SERVER_PORT }}
           BOT_USERNAME: ${{ secrets.BOT_USERNAME }}
           MC_VERSION: ${{ secrets.MC_VERSION }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_KEY_1: ${{ secrets.GEMINI_KEY_1 }}
+          GEMINI_KEY_2: ${{ secrets.GEMINI_KEY_2 }}
+          GEMINI_KEY_3: ${{ secrets.GEMINI_KEY_3 }}
+          GEMINI_KEY_4: ${{ secrets.GEMINI_KEY_4 }}
+          GEMINI_KEY_5: ${{ secrets.GEMINI_KEY_5 }}
         run: node bot.js
